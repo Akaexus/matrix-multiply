@@ -1,0 +1,19 @@
+# ninja log v5
+1	69	1651747237820335775	CMakeFiles/matrix_multiplication.dir/main.cpp.o	e578a6def88afc90
+70	188	1651747237940337943	matrix_multiplication	89dcf088af9f8d00
+1	69	1651747387191095268	CMakeFiles/matrix_multiplication.dir/main.cpp.o	e578a6def88afc90
+69	190	1651747387311097530	matrix_multiplication	89dcf088af9f8d00
+0	65	1651747433519973207	CMakeFiles/matrix_multiplication.dir/main.cpp.o	e578a6def88afc90
+65	194	1651747433647975645	matrix_multiplication	89dcf088af9f8d00
+0	55	1651747689631999527	CMakeFiles/matrix_multiplication.dir/main.cpp.o	e578a6def88afc90
+55	171	1651747689744004382	matrix_multiplication	89dcf088af9f8d00
+0	66	1651747724925507010	CMakeFiles/matrix_multiplication.dir/main.cpp.o	e578a6def88afc90
+67	208	1651747725065512905	matrix_multiplication	89dcf088af9f8d00
+0	51	1651747764911164334	CMakeFiles/matrix_multiplication.dir/main.cpp.o	e578a6def88afc90
+51	170	1651747765027169069	matrix_multiplication	89dcf088af9f8d00
+1	77	1651748308906032021	CMakeFiles/matrix_multiplication.dir/main.cpp.o	e578a6def88afc90
+77	269	1651748309094037732	matrix_multiplication	89dcf088af9f8d00
+1	59	1651748612590845368	CMakeFiles/matrix_multiplication.dir/main.cpp.o	e578a6def88afc90
+59	182	1651748612710848717	matrix_multiplication	89dcf088af9f8d00
+0	208	1651748900942687103	CMakeFiles/matrix_multiplication.dir/main.cpp.o	e578a6def88afc90
+208	515	1651748901246695190	matrix_multiplication	89dcf088af9f8d00
