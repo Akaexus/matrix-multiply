@@ -1,9 +1,11 @@
-#define MATRIX_SIZE 10000
+#define MATRIX_SIZE 1000
 
 #include <omp.h>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <chrono>
+#include <iostream>
 
 float** generateMatrix(int rows, int cols, bool generate = true) {
     float** matrix = new float*[rows];
@@ -38,19 +40,20 @@ int main() {
     float** b = generateMatrix(MATRIX_SIZE, MATRIX_SIZE);
     float** c = generateMatrix(MATRIX_SIZE, MATRIX_SIZE, false);
 
+    auto start_time = std::chrono::high_resolution_clock::now();
     // METODA 3 pętlowa
-//    #pragma omp parallel for shared(a, b, c) default (none)
-//    for(int j = 0; j < MATRIX_SIZE; j++) {
-//        for (int i = 0; i < MATRIX_SIZE; i++) {
-//            float s = 0;
-//            for (int k = 0; k < MATRIX_SIZE; k++) {
-//                s += a[i][k] * b[k][j];
-//            }
-//            c[i][j] = s;
-//        }
-//    }
+   // #pragma omp parallel for shared(a, b, c) default (none)
+   // for(int j = 0; j < MATRIX_SIZE; j++) {
+   //     for (int i = 0; i < MATRIX_SIZE; i++) {
+   //         float s = 0;
+   //         for (int k = 0; k < MATRIX_SIZE; k++) {
+   //             s += a[i][k] * b[k][j];
+   //         }
+   //         c[i][j] = s;
+   //     }
+   // }
 
-//    // METODA 6 pętlowa
+   // METODA 6 pętlowa
     int chunk = 100;
     #pragma omp parallel for shared(a, b, c, chunk) default (none)
     for(int i = 0; i < MATRIX_SIZE; i += chunk) {
@@ -66,10 +69,11 @@ int main() {
             }
         }
     }
-
+    auto end_time = std::chrono::high_resolution_clock::now();
+      auto time = end_time - start_time;
     deleteMatrix(a, MATRIX_SIZE, MATRIX_SIZE);
     deleteMatrix(b, MATRIX_SIZE, MATRIX_SIZE);
     deleteMatrix(c, MATRIX_SIZE, MATRIX_SIZE);
-
+    std::cout << time/std::chrono::milliseconds(1) << "\n";
     return 0;
 }

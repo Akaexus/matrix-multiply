@@ -1,0 +1,552 @@
+==== Projekt: Temat projektu OpenMP / CUDA====
+
+^ Data ^ Status projektu    ^ Uwagi ^
+|2022-04-01|Wybór tematu    | |
+|2022-06-04|Wstawienie sprawozdania    | |
+|2022-06-04|Gotowe do oceny    | |
+
+
+----
+
+==== Streszczenie ====
+Celem tego projektu była analiza efektywności przetwarzania równoległego realizowanego w komputerze równoległym z procesorem wielordzeniowym z pamięcią współdzieloną oraz na karcie graficznej z wykorzystaniem technologii CUDA. Tematem projektu było porównanie efektywności mnożenia macierzy przy pomocy metody 3-pętlowej i 6-pętlowej.
+
+== Słowa kluczowe: ==
+  * OpenMP
+  * CUDA
+  * MAGA
+
+----
+
+==== OpenMP ====
+=== Metoda 3-pętlowa ===
+Metoda 3-pętlowa z kolejnością pętli JIK. Najbardziej wewnętrzna pętla odpowiada za iteracje na wierszach macierzy A oraz kolumnach w macierzy B w celu obliczenia pojedynczego elementu tablicy wynikowej C. Dwie poprzednie pętle (JI) służą nam w celu wyznaczenia kolejnych elementów macierzy wynikowej C. Pętla J określa nam kolumnę macierzy wynikowej oraz kolumnę  macierzy B. Ilość danych wykorzystywanych w dwóch pętlach wewnętrznych  (IK), czyli dla jednej iteracji I to jedna kolumna macierzy wynikowej C, cała macierz A oraz kolumna j macierzy B.
+{{ :pr22:s145334:3-for-1.png?nolink |}}
+Ilość danych wykorzystywanych w pętli wewnętrznej
+
+{{ :pr22:s145334:3-for-2.png?nolink |}}
+Ilość danych wykorzystywanych w 2 pętlach wewnętrznych
+
+== Opis algorytmu sekwencyjnego ==
+  * **Dane**: dwie kwadratowe macierze int o wielkości MATRIX_SIZE wypełnione losowymi liczbami
+  * **Wynik**: wymnożona macierz kwadratowa o wielkości MATRIX_SIZE
+  * **Metoda**: 3-pętlowa
+  * **Złożoność**: n^3
+
+== Opis algorytmu równoległego ==
+
+  * **Dane**: dwie kwadratowe macierze int o wielkości MATRIX_SIZE wypełnione losowymi liczbami
+  * **Wynik**: wymnożona macierz kwadratowa o wielkości MATRIX_SIZE
+  * **Metoda**: 3-pętlowa
+  * **Złożoność**: n^3
+  * **Skalowalność**: Zrównoleglenie następuje poprzez wykorzystanie dyrektywy ''omp parallel for'' na najbardziej zewnętrznej pętli (odpowiadającej za wyznaczanie kolumny macierzy wynikowej). Z racji takiej implementacji skalowanie ma sens tak długo, jak liczba kolumn macierzy wynikowej jest większa lub równa ilości wątków. Jeżeli mamy wątków niż kolumn macierzy wynikowej to nie następuje dalszy przyrost wydajności.
+  * **Schemat strategii dzielenia się pracą**: Zrównoleglenie następuje poprzez wykorzystanie dyrektywy ''omp parallel for'' na najbardziej zewnętrznej pętli (odpowiadającej za wyznaczanie kolumny macierzy wynikowej).
+  * **Zakresy dopuszczalnych wartości parametrów wywołania programu**: Od wielkości parametru MATRIX_SIZE (określajacego wielkość macierzy) mocno zależą wymagania pamięciowe programu. Program musi zaalokować 3 macierze kwadratowe o rozmiarze MATRIX_SIZE, co typu int o standardowym rozmiarze 4 bajtów wymaga alokacji 4 * 3 * MATRIX_SIZE * MATRIX_SIZE bajtów pamięci.
+  * **Schemat dekompozycji i agregacji strumieni danych**: Zastosowano dyrektywę ''shared(a, b, c)'', która ustanawia zmienne a, b, c (macierze) jako współdzielone między wątkami. Algorytm korzysta z tablic wejściowych a i b w sposób tylko dla odczytu i nie ma sensu ustanawiać ich jako private. W kontekście macierzy wynikowej c każdy wątek zajmuje się osobnymi wierszami, dlatego nie występują żadne konflikty i potrzeby stosowania zaawansowanej agregacji danych wynikowych.
+
+
+== Kody programów ==
+  * Fragmenty kodów
+<code c>
+#pragma omp parallel for shared(a, b, c) default (none)
+for(int j = 0; j < MATRIX_SIZE; j++) {
+    for (int i = 0; i < MATRIX_SIZE; i++) {
+        float s = 0;
+        for (int k = 0; k < MATRIX_SIZE; k++) {
+            s += a[i][k] * b[k][j];
+        }
+        c[i][j] = s;
+    }
+}
+</code>
+
+  * Link do repozytorium projektu: [[ms2jpg/matrix-multiply|https://github.com/ms2jpg/matrix-multiply]]
+  * Kompilacja: g++ -o main main.cpp -fopenmp
+
+=== Metoda 6-pętlowa ===
+W tej metodzie kolejność mamy kolejność pętli zewnętrznych IJK oraz pętli wewnętrznych IKJ. Występuje w niej podział macierzy na poszczególne chunki o wielkości R. Trzy pętle wewnętrzne służą do wyznaczania wyniku częściowego dla fragmentu tablicy wynikowej (sum iloczynów elementów wierszy macierzy A i kolumn macierzy B dla poszczególnych bloków macierzy wejściowych). Czwarta pętla z kolei (ta znajdująca się po k) służy do uzupełnienia wyniku o pozostałe iloczyny wynikające z uwzględnienia kolejnych elementów wierszy i kolumn macierzy wejściowych. Dwie pierwsze pętle służą do wyznaczania kolejnych kwadratowych obszarów macierzy wynikowej.
+
+== Opis algorytmu sekwencyjnego ==
+  * **Dane**: dwie kwadratowe macierze int o wielkości MATRIX_SIZE wypełnione losowymi liczbami
+  * **Wynik**: wymnożona macierz kwadratowa o wielkości MATRIX_SIZE
+  * **Metoda**: 6-pętlowa
+  * **Złożoność**: (n / chunk) ^ 3 * chunk ^ 3 = n ^ 3
+
+== Opis algorytmu równoległego ==
+
+  * **Dane**: dwie kwadratowe macierze int o wielkości MATRIX_SIZE wypełnione losowymi liczbami
+  * **Wynik**: wymnożona macierz kwadratowa o wielkości MATRIX_SIZE
+  * **Metoda**: 3-pętlowa
+  * **Złożoność**: n^3
+  * **Skalowalność**: Zrównoleglenie następuje poprzez wykorzystanie dyrektywy ''omp parallel for'' na najbardziej zewnętrznej pętli (odpowiadającej za wyznaczanie chunków). Skalowalność zależy od dobranej wielkości chunka.
+  * **Schemat strategii dzielenia się pracą**: Zrównoleglenie następuje poprzez wykorzystanie dyrektywy ''omp parallel for'' na najbardziej zewnętrznej pętli (odpowiadającej za wyznaczanie chunków).
+  * **Zakresy dopuszczalnych wartości parametrów wywołania programu**: Od wielkości parametru MATRIX_SIZE (określajacego wielkość macierzy) mocno zależą wymagania pamięciowe programu. Program musi zaalokować 3 macierze kwadratowe o rozmiarze MATRIX_SIZE, co typu int o standardowym rozmiarze 4 bajtów wymaga alokacji 4 * 3 * MATRIX_SIZE * MATRIX_SIZE bajtów pamięci. Dodatkowo parametr ''chunk'' określający wielkość chunka, MATRIX_SIZE musi być podzielne przez ''chunk''.
+  * **Schemat dekompozycji i agregacji strumieni danych**: Zastosowano dyrektywę ''shared(a, b, c, chunk)'', która ustanawia zmienne a, b, c (macierze) jako współdzielone między wątkami. Algorytm korzysta z tablic wejściowych a i b oraz wielkością chunk w sposób tylko dla odczytu i nie ma sensu ustanawiać ich jako private. W kontekście macierzy wynikowej c każdy wątek zajmuje się osobnymi obszarami, dlatego nie występują żadne konflikty i potrzeby stosowania zaawansowanej agregacji danych wynikowych.
+
+
+== Kody programów ==
+  * Fragmenty kodów
+<code c>
+int chunk = 100;
+#pragma omp parallel for shared(a, b, c, chunk) default (none)
+for(int i = 0; i < MATRIX_SIZE; i += chunk) {
+    for (int j = 0; j < MATRIX_SIZE; j += chunk) {
+        for (int k = 0; k < MATRIX_SIZE; k += chunk) {
+            for (int ii = i; ii < i + chunk; ii++) {
+                for (int kk = k; kk < k + chunk; kk++) {
+                    for (int jj = j; jj < j + chunk; jj++) {
+                        c[ii][jj] += a[ii][kk] * b[kk][jj];
+                    }
+                }
+            }
+        }
+    }
+}
+</code>
+
+  * Link do repozytorium projektu: [[ms2jpg/matrix-multiply|https://github.com/ms2jpg/matrix-multiply]]
+  * Kompilacja: g++ -o main main.cpp -fopenmp
+
+
+
+==== Testy programów i profilowanie aplikacji ====
+  * Opis architektury komputera wykorzystanego do przeprowadzenia testów (procesor, pamięć, liczba rdzeni itd. - najlepiej opisane w formacie JSON, zobacz: [[wsp:cudadeviceprop]])
+    * ''/proc/cpuinfo''
+    <code js>
+      {
+        "processor":"3"
+        "vendor_id":"GenuineIntel"
+        "cpu family":"6"
+        "model":"58"
+        "model name":"Intel(R) Core(TM) i5-3340M CPU @ 2.70GHz"
+        "stepping":"9"
+        "microcode":"0x21"
+        "cpu MHz":"1422.578"
+        "cache size":"3072 KB"
+        "physical id":"0"
+        "siblings":"4"
+        "core id":"1"
+        "cpu cores":"2"
+        "apicid":"3"
+        "initial apicid":"3"
+        "fpu":"yes"
+        "fpu_exception":"yes"
+        "cpuid level":"13"
+        "wp":"yes"
+        "flags":"fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx rdtscp lm constant_tsc arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm cpuid_fault epb pti ssbd ibrs ibpb stibp tpr_shadow vnmi flexpriority ept vpid fsgsbase smep erms xsaveopt dtherm ida arat pln pts md_clear flush_l1d"
+        "vmx flags":"vnmi preemption_timer invvpid ept_x_only flexpriority tsc_offset vtpr mtf vapic ept vpid unrestricted_guest"
+        "bugs":"cpu_meltdown spectre_v1 spectre_v2 spec_store_bypass l1tf mds swapgs itlb_multihit srbds"
+        "bogomips":"5388.04"
+        "clflush size":"64"
+        "cache_alignment":"64"
+        "address sizes":"36 bits physical, 48 bits virtual"
+      }
+    </code>
+    * ''$ cat /proc/meminfo''
+    <code json>
+      {
+        "MemTotal":"16250600 kB"
+        "MemFree":"262976 kB"
+        "MemAvailable":"8798904 kB"
+        "Buffers":"475376 kB"
+        "Cached":"9047608 kB"
+        "SwapCached":"16 kB"
+        "Active":"3169484 kB"
+        "Inactive":"11532404 kB"
+        "Active(anon)":"8368 kB"
+        "Inactive(anon)":"6149028 kB"
+        "Active(file)":"3161116 kB"
+        "Inactive(file)":"5383376 kB"
+        "Unevictable":"431612 kB"
+        "Mlocked":"32 kB"
+        "SwapTotal":"2097148 kB"
+        "SwapFree":"2096124 kB"
+        "Dirty":"2012 kB"
+        "Writeback":"0 kB"
+        "AnonPages":"5610572 kB"
+        "Mapped":"2163136 kB"
+        "Shmem":"1017788 kB"
+        "KReclaimable":"332980 kB"
+        "Slab":"587352 kB"
+        "SReclaimable":"332980 kB"
+        "SUnreclaim":"254372 kB"
+        "KernelStack":"24912 kB"
+        "PageTables":"70388 kB"
+        "NFS_Unstable":"0 kB"
+        "Bounce":"0 kB"
+        "WritebackTmp":"0 kB"
+        "CommitLimit":"10222448 kB"
+        "Committed_AS":"17757136 kB"
+        "VmallocTotal":"34359738367 kB"
+        "VmallocUsed":"59140 kB"
+        "VmallocChunk":"0 kB"
+        "Percpu":"10240 kB"
+        "HardwareCorrupted":"0 kB"
+        "AnonHugePages":"0 kB"
+        "ShmemHugePages":"0 kB"
+        "ShmemPmdMapped":"0 kB"
+        "FileHugePages":"0 kB"
+        "FilePmdMapped":"0 kB"
+        "HugePages_Total":"0"
+        "HugePages_Free":"0"
+        "HugePages_Rsvd":"0"
+        "HugePages_Surp":"0"
+        "Hugepagesize":"2048 kB"
+        "Hugetlb":"0 kB"
+        "DirectMap4k":"527916 kB"
+        "DirectMap2M":"16113664 kB"
+      }
+    </code>
+  * Analiza porównawcza wydajności w przypadku wykorzystania różnych architektur (lub ustawień - np. wybranie określonego rdzenia do realizacji zadania)
+  * Opracowanie testów weryfikujących czy mogło dojść do hazardu przy odczycie/zapisie danych w tablicach (naruszenie izolacji zakresów indeksów między wątkami)
+  * Zobacz: [[pr:vtune]]
+
+
+==== Pomiary czasu ====
+Za metodykę badań przyjęto uśredniony czas z 5 uruchomień dla każdej możliwej konfiguracji.
+
+{{ :pr22:s145334:omp_seq.png?nolink |}}
+{{ :pr22:s145334:omp_par_3loop.png?nolink |}}
+
+Zestawienie czasów oraz przyrostów wydajności dla metody 3-pętlowej
+^ MATRIX_SIZE ^ czas dla 1 wątku (ms) ^ czas dla 4 wątków (ms) ^ Przyrost wydajnosci ^
+| 1000 |	6767	| 3650 |	185,40% |
+| 1400 |	19328	| 10649 |	181,50% |
+| 1800 |	42304	| 23810 |	177,67% |
+| 2200 |	80278	| 45127 |	177,89% |
+| 2600 |	140153	| 79814 |	175,60% |
+| 3000 |	229969	| 126809 |	181,35% |
+
+{{ :pr22:s145334:omp_par_6loop.png?nolink |}}
+
+Zestawienie czasów oraz przyrostów wydajności dla metody 6-pętlowej
+^ MATRIX_SIZE ^ czas dla 1 wątku (ms) ^ czas dla 4 wątków (ms) ^ Przyrost wydajnosci ^
+| 1000 |	5061 |	2654 |	189,76% |
+| 1400 |	13782 |	7325 |	191,55% |
+| 1800 |	29368 |	15484 |	190,08% |
+| 2200 |	53595 |	28664 |	191,53% |
+| 2600 |	89399 |	46769 |	191,49% |
+| 3000 |	136220 |	73380 |	192,06% |
+
+Na podstawie tych danych łatwo zauważyć, że przetwarzanie równoległe jest dużo lepsze od przetwarzania sekwencyjnego oraz że metoda 3-pętlowa jest wolniejsza od tej 6-petlowej. Wartym uwagi jest fakt, że wraz ze wzrostem parametru chunk czas przetwarzania dla metody 6-pętlowej zmienia się. Najpierw maleje do jakiejś wartości,  a następnie rośnie.  Najlepszy czas można uzyskać dla optymalnego parametru chunk. Można go wyznaczyć ze wzoru: chunk <= sqrt(MATRIX_SIZE/2).
+{{ :pr22:s145334:omp_par_6loop_chunk_size.png?nolink |}}
+
+==== CUDA ====
+Zaimplementowano algorytm mnożenia macierzy z wykorzystaniem technologii CUDA przy użyciu języka python oraz pomocniczej biblioteki CuPy. W zastosowanym algorytmie każdy wątek wylicza osobny składnik komórki w macierzy wynikowej i dodaje go do macierzy wynikowej wykorzystując atomicAdd().
+<code python>
+  import numpy as np
+  import cupy as cp
+  import time
+  class cuda_kernels():
+      # Matrix multiplication method
+      # Calculate a[mxn] * b[nxp] = c[mxp]
+      def matmul_cuda():
+          kernel = cp.RawKernel(r'''
+          #include <cupy/complex.cuh>
+          extern "C"{
+              __global__ void matmul(const double *A, const double *B, double *C, int m, int n, int p)
+              {
+                  int bid = gridDim.y*blockIdx.x + blockIdx.y;
+                  int tid = threadIdx.x;
+                  int nelements = m*p;
+                  if ((bid < nelements) && (tid < n))
+                  {
+                      int arow = bid / p;
+                      int bcolumn = bid % p;
+                      atomicAdd(&C[bid], A[arow*n+tid]*B[bcolumn+tid*p]);
+                  }
+              }
+          }''', 'matmul')
+          return kernel
+  # Allocate matrices on gpu
+  N = 1000
+  A = cp.ones((N,N))
+  B = cp.ones((N,N))
+  C = cp.zeros((A.shape[0],B.shape[1]),cp.double)
+  m = A.shape[0]; n = A.shape[1]; p = B.shape[1]
+  # Allocate gpu grid
+  blockx = 1024; blocky = 1024
+  threadx = 1024
+  kernel = cuda_kernels.matmul_cuda()
+  # Call and time the cuda kernel
+  start = time.time()
+  kernel((blockx,blocky), (threadx,), (A, B, C, m, n, p))
+  end = time.time()
+  # Print timing
+  print("Time = {}".format(end - start))
+</code>
+
+=== Platforma sprzętowa ===
+Z uwagi na brak karty graficznej Nvidia z obsługą technologii CUDA została wykorzystana karta graficzna dostępna online z platformy Google Collab. Przydzielona karta to Nvidia Tesla T4.
+<code json>
+  {
+    "name": "Tesla T4",
+   "totalGlobalMem": 15843721216,
+   "sharedMemPerBlock": 49152,
+   "regsPerBlock": 65536,
+   "warpSize": 32,
+   "maxThreadsPerBlock": 1024,
+   "maxThreadsDim": (1024, 1024, 64),
+   "maxGridSize": (2147483647, 65535, 65535),
+   "clockRate": 1590000,
+   "totalConstMem": 65536,
+   "major": 7,
+   "minor": 5,
+   "textureAlignment": 512,
+   "texturePitchAlignment": 32,
+   "multiProcessorCount": 40,
+   "kernelExecTimeoutEnabled": 0,
+   "integrated": 0,
+   "canMapHostMemory": 1,
+   "computeMode": 0,
+   "maxTexture1D": 131072,
+   "maxTexture2D": (131072, 65536),
+   "maxTexture3D": (16384, 16384, 16384),
+   "concurrentKernels": 1,
+   "ECCEnabled": 1,
+   "pciBusID": 0,
+   "pciDeviceID": 4,
+   "pciDomainID": 0,
+   "tccDriver": 0,
+   "memoryClockRate": 5001000,
+   "memoryBusWidth": 256,
+   "l2CacheSize": 4194304,
+   "maxThreadsPerMultiProcessor": 1024,
+   "isMultiGpuBoard": 0,
+   "cooperativeLaunch": 1,
+   "cooperativeMultiDeviceLaunch": 1,
+   "deviceOverlap": 1,
+   "maxTexture1DMipmap": 32768,
+   "maxTexture1DLinear": 268435456,
+   "maxTexture1DLayered": (32768, 2048),
+   "maxTexture2DMipmap": (32768, 32768),
+   "maxTexture2DLinear": (131072, 65000, 2097120),
+   "maxTexture2DLayered": (32768, 32768, 2048),
+   "maxTexture2DGather": (32768, 32768),
+   "maxTexture3DAlt": (8192, 8192, 32768),
+   "maxTextureCubemap": 32768,
+   "maxTextureCubemapLayered": (32768, 2046),
+   "maxSurface1D": 32768,
+   "maxSurface1DLayered": (32768, 2048),
+   "maxSurface2D": (131072, 65536),
+   "maxSurface2DLayered": (32768, 32768, 2048),
+   "maxSurface3D": (16384, 16384, 16384),
+   "maxSurfaceCubemap": 32768,
+   "maxSurfaceCubemapLayered": (32768, 2046),
+   "surfaceAlignment": 512,
+   "asyncEngineCount": 3,
+   "unifiedAddressing": 1,
+   "streamPrioritiesSupported": 1,
+   "globalL1CacheSupported": 1,
+   "localL1CacheSupported": 1,
+   "sharedMemPerMultiprocessor": 65536,
+   "regsPerMultiprocessor": 65536,
+   "managedMemory": 1,
+   "multiGpuBoardGroupID": 0,
+   "hostNativeAtomicSupported": 0,
+   "singleToDoublePrecisionPerfRatio": 32,
+   "pageableMemoryAccess": 0,
+   "concurrentManagedAccess": 1,
+   "computePreemptionSupported": 1,
+   "canUseHostPointerForRegisteredMem": 1,
+   "sharedMemPerBlockOptin": 65536,
+   "pageableMemoryAccessUsesHostPageTables": 0,
+   "directManagedMemAccessFromHost": 0,
+   "luid": "",
+   "luidDeviceNodeMask": 0,
+   "persistingL2CacheMaxSize": 0,
+   "maxBlocksPerMultiProcessor": 16,
+   "accessPolicyMaxWindowSize": 0,
+   "reservedSharedMemPerBlock": 0
+  }
+</code>
+
+=== Wyniki ===
+Dla rozmiaru macierzy powyżej N ~= 17000 brakuje pamięci w karcie graficznej i nie da się przeprowadzić obliczeń dla zaimplementowanej metody.
+
+{{ :pr22:s145334:cuda_bench.png?nolink |}}
+
+Kształt wykresu bardzo przypomina wykresy czasów przetwarzania dla metod zaimplementowanych z użyciem OpenMP. Początkowo może się wydawać, że czas przetwarzania powinien być stały (poprzez to, że osobny wątek wykonuje obliczenia dla każdego składnika sumy z komórki macierzy wyjściowej), jednak ze względu na wykorzystanie funkcji ''atomicAdd()''. Czas przetwarzania rośnie z wielkością macierzy, ponieważ n wątków w podobnym czasie wykonać ''atomicAdd()'' na tej samej komórce macierzy wyjściowej. Wykorzystanie technologii CUDA wraz z bardzo mocną kartą graficzną Tesla T4 pozwoliło na uzyskanie średnich przyrostów na poziomie 1755458635x.
+-----
+-----
+-----
+-----
+====== Zadania z labów ======
+
+Z tego nic nie będzie choć powstanie
+====== Sumowanie ======
+<code c>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <omp.h>
+
+int main(int argc, char * argv[]) {
+ int c;
+ char * filename = "liczby.txt";
+ char bufor[8000][1000];
+ int L = 0;
+ int v = 0;
+
+ if (argc>1) {filename = argv[1]; };
+ fprintf(stderr,"Plik:%s\n",filename);
+ FILE * f = fopen(filename,"r");
+
+ if (f!=NULL)
+ {
+  int line=0;
+  while ((c = fscanf(f,"%s",bufor[line]))>0) {
+          line++;
+}
+  int n = line;
+  int i=0;
+
+  #pragma omp parallel for reduction(+:L) private(i,v) schedule(dynamic, 100)
+  for (i=0;i<n;i++)
+  {
+   printf("[%d] %s\n", omp_get_thread_num(), bufor[i]);
+   v = atoi(bufor[i]);
+   L+=v;
+  }
+ }
+ fclose(f);
+ printf("{Suma:%d}\n",L);
+ return EXIT_SUCCESS;
+}
+</code>
+
+====== Kombinacje ======
+Niestety nie znalazłem boilerplate tego zadania, wiec stworzyłem własny kod wraz z własnym formatem inputu:
+<code c>
+#include <stdio.h>
+#include <stdlib.h>
+#include <malloc.h>
+#include <omp.h>
+#include <math.h>
+#include <vector>
+
+int main() {
+        std::vector<char> variables {'p', 'q'};
+
+        std::vector< std::vector< std::vector<int> > > formula {
+                // sign (-1 is negative), variable_index
+                {{1, 1}, {-1, 1}}
+        };
+        int max = pow(2, variables.size());
+        std::vector <int> variableValues(variables.size(), 0);
+
+        int good = 1;
+        #pragma omp parallel for shared(good)
+        for(int mask = 0; mask < max; mask += 1) {
+                if (!good) {
+                        continue;
+                }
+                for(int i = variables.size() - 1; i >= 0; i--) {
+                        variableValues[i] = (mask >> (variables.size() - i - 1)) & 1;
+                }
+                int fragments = formula.size();
+                for (int fragment = 0; fragment < fragments; fragment++) {
+                        int f = 0;
+                        for (int fvi = 0; fvi < formula[fragment].size(); fvi++) {
+                                int vv;
+                                if (formula[fragment][fvi][0] == 1) {
+                                        vv = variableValues[formula[fragment][fvi][1]];
+                                } else if (formula[fragment][fvi][0] == -1) {
+                                        vv = !variableValues[formula[fragment][fvi][1]];
+                                }
+                                f = f || vv;
+                        }
+                        if (!f) {
+                                good = 0;
+                        }
+                }
+
+        }
+        printf(good ? "true\n" : "false\n");
+        return 0;
+}
+
+
+/* PRAWIE GIT
+ *
+
+int main() {
+        char variables[] = {'p', 'q', 'r', 's', 't'};
+        int noVariables = sizeof(variables) / sizeof(*variables);
+        int formula[][NO_VARIABLES] = {
+                {1, 1, 1, -1, 1}
+                //{0, 1, -1, 1, -1},
+                //{1, -1, 0, -1, 0},
+                //{1, -1, 0, -1, 0}
+        };
+        int max = pow(2, noVariables);
+        int variableValues[NO_VARIABLES] = {0};
+        int good = 1;
+        #pragma omp parallel for shared(good)
+        for(int mask = 0; mask < max; mask += 1) {
+                if (!good) {
+                        continue;
+                }
+                for(int i = NO_VARIABLES - 1; i >= 0; i--) {
+                        variableValues[i] = (mask >> (NO_VARIABLES - i - 1)) & 1;
+                }
+                printf("[%d] %d -> %d%d%d%d%d\n", omp_get_thread_num(), mask, variableValues[0], variableValues[1], variableValues[2], variableValues[3], variableValues[4]);
+                int fragments = sizeof(formula)/sizeof(formula[0]);
+                for (int fragment = 0; fragment < fragments; fragment++) {
+                        int f = 0;
+                        for (int vi = 0; vi < NO_VARIABLES; vi++) {
+
+                                int vv;
+                                if (formula[fragment][vi] == 1) {
+                                        vv = variableValues[vi];
+                                } else if (formula[fragment][vi] == -1) {
+                                        vv = !variableValues[vi];
+                                }
+                                f = f || vv;
+                        }
+                        printf("%d\n", f);
+                        if (!f) {
+                                good = 0;
+                        }
+                        //printf("  [%d] fragment %d, value %d\n", omp_get_thread_num(), fragment, f);
+                }
+
+        }
+        printf(good ? "true\n" : "false\n");
+        return 0;
+}
+ */
+
+
+/*
+    void genkomb(char * bufor, int level, int n, int k, int w, int kmax) {
+
+     if (level==n) { if (w==kmax) printf("%s\n",bufor);} else
+      {
+        bufor[level]='0'; bufor[level+1]=0;
+        genkomb(bufor,level+1,n,k,w,kmax);
+        if (k>0)
+          {
+            bufor[level]='1'; bufor[level+1]=0;
+            genkomb(bufor,level+1,n,k-1,w+1,kmax);
+          }
+      }
+    }
+
+    int main(int argc, char * argv[]) {
+     int n = 1;
+     int k = 1;
+
+
+     if (argc > 1)  n = atoi(argv[1]);
+     if (argc > 2)  k = atoi(argv[2]);
+     int x = n * sizeof(char) + 1;
+     char * bufor = (char*)malloc(x);
+     bufor[0]=0;
+
+     genkomb(bufor,0,n,k,0,k);
+     free(bufor);
+     return EXIT_SUCCESS;
+    }
+*/
+</code>
